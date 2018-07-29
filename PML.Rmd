@@ -1,0 +1,99 @@
+---
+title: 'Practical Machine Learning: Prediction Assignment'
+author: "Shlomi Rosenberg"
+date: "2018 M07 29"
+output: html_document
+---
+
+## Overview
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. 
+The report will describe
+- How i built my model
+- How i used cross validation
+- What i think the expected out of sample error is
+I will also use my prediction model to predict 20 different test cases.
+
+## Setup libraries
+```{r}
+library(caret)
+library(ggplot2)
+library(randomForest)
+library(rpart)
+```
+
+## Download and Load the data
+```{r}
+if(!file.exists("pml-training.csv")){
+  url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+  download.file(url, destfile="./pml-training.csv")
+}
+if(!file.exists("pml-testing.csv")){
+  url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+  download.file(url,destfile="./pml-testing.csv")
+}
+
+train <- read.csv("pml-training.csv", sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+test  <- read.csv("pml-testing.csv",  sep=",", header=TRUE, na.strings = c("NA","",'#DIV/0!'))
+dim(train); dim(test)
+```
+
+## Clean the data
+```{r}
+train <- train[, colSums(is.na(train)) == 0]
+test  <- test [, colSums(is.na(test))  == 0]
+dim(train); dim(test)
+names(train)
+```
+
+## Pre-processing and create validation set
+```{r}
+numVars <- which(lapply(train, class) %in% "numeric")
+model   <- preProcess(train[, numVars], method = c('knnImpute', 'center', 'scale'))
+
+pTrain        <- predict(model, train[, numVars])
+pTrain$classe <- train$classe
+pTest         <- predict(model, test[, numVars])
+
+set.seed(1234)
+idxTrain   <- createDataPartition(pTrain$classe, p = 0.75, list = FALSE)
+train <- pTrain[idxTrain, ]
+valid <- pTrain[-idxTrain, ]
+dim(train) ; dim(valid)
+```
+
+## Train a model using random forest
+```{r}
+rfFit <- train(classe ~ ., method="rf", data = train, trControl = trainControl(method='cv'), number = 5, allowParallel = TRUE, importance = TRUE )
+rfFit
+```
+Plot the importance of each individual variable
+```{r}
+varImpPlot(rfFit$finalModel, type = 1, main = "Importance of the Principal Components")
+```
+
+## Test on the Cross validation set
+```{r}
+predicted <- predict(rfFit, valid)
+conMatrix <- confusionMatrix(valid$classe, predicted)
+conMatrix$table
+```
+Evaluate result
+```{r}
+accuracy <- postResample(valid$classe, predicted)
+accuracy <- accuracy[[1]]
+accuracy
+```
+
+# Apply learnings on 20 different test cases
+```{r}
+prediction <- predict(rfFit, pTest)
+prediction
+```
+
+
+
+
+
+
+
